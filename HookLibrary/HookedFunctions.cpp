@@ -38,7 +38,7 @@ NTSTATUS NTAPI HookedNtSetInformationThread(HANDLE ThreadHandle, THREADINFOCLASS
     if (ThreadInformationClass == ThreadHideFromDebugger && ThreadInformationLength == 0) // NB: ThreadInformation is not checked, this is deliberate
     {
         if (ThreadHandle == NtCurrentThread ||
-			HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess) == GetProcessIdByThreadHandle(ThreadHandle)) //thread inside this process?
+            HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess) == GetProcessIdByThreadHandle(ThreadHandle)) //thread inside this process?
         {
             return STATUS_SUCCESS;
         }
@@ -79,7 +79,7 @@ NTSTATUS NTAPI HookedNtQuerySystemInformation(SYSTEM_INFORMATION_CLASS SystemInf
                 FilterHandleInfo((PSYSTEM_HANDLE_INFORMATION)SystemInformation, &ReturnLengthAdjust);
 
                 if (ReturnLengthAdjust <= TempReturnLength)
-				    TempReturnLength -= ReturnLengthAdjust;
+                    TempReturnLength -= ReturnLengthAdjust;
                 RESTORE_RETURNLENGTH();
             }
             else if (SystemInformationClass == SystemExtendedHandleInformation)
@@ -196,6 +196,17 @@ InstrumentationCallback(
     return ReturnVal;
 }
 
+NTSTATUS NTAPI HookedNtQueryInformationThread(HANDLE ThreadHandle, THREADINFOCLASS ThreadInformationClass, PVOID ThreadInformation, ULONG ThreadInformationLength, PULONG ReturnLength)
+{
+    NTSTATUS Status = HookDllData.dNtQueryInformationThread(ThreadHandle,
+                                                            ThreadInformationClass,
+                                                            ThreadInformation,
+                                                            ThreadInformationLength,
+                                                            ReturnLength);
+
+    return Status;
+}
+
 NTSTATUS NTAPI HookedNtQueryInformationProcess(HANDLE ProcessHandle, PROCESSINFOCLASS ProcessInformationClass, PVOID ProcessInformation, ULONG ProcessInformationLength, PULONG ReturnLength)
 {
     if (NumManualSyscalls == 0 &&
@@ -275,13 +286,13 @@ NTSTATUS NTAPI HookedNtQueryInformationProcess(HANDLE ProcessHandle, PROCESSINFO
 
                 RESTORE_RETURNLENGTH();
             }
-			else if (ProcessInformationClass == ProcessHandleTracing)
-			{
+            else if (ProcessInformationClass == ProcessHandleTracing)
+            {
                 BACKUP_RETURNLENGTH();
                 RESTORE_RETURNLENGTH(); // Trigger any possible exceptions caused by messing with the output buffer before changing the final return status
 
                 Status = IsProcessHandleTracingEnabled ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
-			}
+            }
             else if (ProcessInformationClass == ProcessIoCounters)
             {
                 BACKUP_RETURNLENGTH();
@@ -299,88 +310,88 @@ NTSTATUS NTAPI HookedNtQueryInformationProcess(HANDLE ProcessHandle, PROCESSINFO
 
 NTSTATUS NTAPI HookedNtSetInformationProcess(HANDLE ProcessHandle, PROCESSINFOCLASS ProcessInformationClass, PVOID ProcessInformation, ULONG ProcessInformationLength)
 {
-	if (ProcessHandle == NtCurrentProcess || HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess) == GetProcessIdByProcessHandle(ProcessHandle))
+    if (ProcessHandle == NtCurrentProcess || HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess) == GetProcessIdByProcessHandle(ProcessHandle))
     {
         if (ProcessInformationClass == ProcessBreakOnTermination)
         {
-			if (ProcessInformationLength != sizeof(ULONG))
-			{
-				return STATUS_INFO_LENGTH_MISMATCH;
-			}
+            if (ProcessInformationLength != sizeof(ULONG))
+            {
+                return STATUS_INFO_LENGTH_MISMATCH;
+            }
 
-			// NtSetInformationProcess will happily dereference this pointer
-			if (ProcessInformation == NULL)
-			{
-				return STATUS_ACCESS_VIOLATION;
-			}
+            // NtSetInformationProcess will happily dereference this pointer
+            if (ProcessInformation == NULL)
+            {
+                return STATUS_ACCESS_VIOLATION;
+            }
 
-			// A process must have debug privileges enabled to set the ProcessBreakOnTermination flag
-			if (!HasDebugPrivileges(NtCurrentProcess))
-			{
-				return STATUS_PRIVILEGE_NOT_HELD;
-			}
+            // A process must have debug privileges enabled to set the ProcessBreakOnTermination flag
+            if (!HasDebugPrivileges(NtCurrentProcess))
+            {
+                return STATUS_PRIVILEGE_NOT_HELD;
+            }
 
             ValueProcessBreakOnTermination = *((ULONG *)ProcessInformation);
             return STATUS_SUCCESS;
         }
 
-		// Don't allow changing the debug inherit flag, and keep track of the new value to report in NtQIP
-		if (ProcessInformationClass == ProcessDebugFlags)
-		{
-			if (ProcessInformationLength != sizeof(ULONG))
-			{
-				return STATUS_INFO_LENGTH_MISMATCH;
-			}
+        // Don't allow changing the debug inherit flag, and keep track of the new value to report in NtQIP
+        if (ProcessInformationClass == ProcessDebugFlags)
+        {
+            if (ProcessInformationLength != sizeof(ULONG))
+            {
+                return STATUS_INFO_LENGTH_MISMATCH;
+            }
 
-			if (ProcessInformation == NULL)
-			{
-				return STATUS_ACCESS_VIOLATION;
-			}
+            if (ProcessInformation == NULL)
+            {
+                return STATUS_ACCESS_VIOLATION;
+            }
 
-			ULONG Flags = *(ULONG*)ProcessInformation;
-			if ((Flags & ~PROCESS_DEBUG_INHERIT) != 0)
-			{
-				return STATUS_INVALID_PARAMETER;
-			}
+            ULONG Flags = *(ULONG*)ProcessInformation;
+            if ((Flags & ~PROCESS_DEBUG_INHERIT) != 0)
+            {
+                return STATUS_INVALID_PARAMETER;
+            }
 
-			if ((Flags & PROCESS_DEBUG_INHERIT) != 0)
-			{
-				ValueProcessDebugFlags &= ~PROCESS_NO_DEBUG_INHERIT;
-			}
-			else
-			{
-				ValueProcessDebugFlags |= PROCESS_NO_DEBUG_INHERIT;
-			}
-			return STATUS_SUCCESS;
-		}
+            if ((Flags & PROCESS_DEBUG_INHERIT) != 0)
+            {
+                ValueProcessDebugFlags &= ~PROCESS_NO_DEBUG_INHERIT;
+            }
+            else
+            {
+                ValueProcessDebugFlags |= PROCESS_NO_DEBUG_INHERIT;
+            }
+            return STATUS_SUCCESS;
+        }
 
-		//PROCESS_HANDLE_TRACING_ENABLE -> ULONG, PROCESS_HANDLE_TRACING_ENABLE_EX -> ULONG,ULONG
-		if (ProcessInformationClass == ProcessHandleTracing)
-		{
-			bool enable = ProcessInformationLength != 0; // A length of 0 is valid and indicates we should disable tracing
-			if (enable)
-			{
-				if (ProcessInformationLength != sizeof(ULONG) && ProcessInformationLength != (sizeof(ULONG) * 2))
-				{
-					return STATUS_INFO_LENGTH_MISMATCH;
-				}
+        //PROCESS_HANDLE_TRACING_ENABLE -> ULONG, PROCESS_HANDLE_TRACING_ENABLE_EX -> ULONG,ULONG
+        if (ProcessInformationClass == ProcessHandleTracing)
+        {
+            bool enable = ProcessInformationLength != 0; // A length of 0 is valid and indicates we should disable tracing
+            if (enable)
+            {
+                if (ProcessInformationLength != sizeof(ULONG) && ProcessInformationLength != (sizeof(ULONG) * 2))
+                {
+                    return STATUS_INFO_LENGTH_MISMATCH;
+                }
 
-				// NtSetInformationProcess will happily dereference this pointer
-				if (ProcessInformation == NULL)
-				{
-					return STATUS_ACCESS_VIOLATION;
-				}
+                // NtSetInformationProcess will happily dereference this pointer
+                if (ProcessInformation == NULL)
+                {
+                    return STATUS_ACCESS_VIOLATION;
+                }
 
-				PPROCESS_HANDLE_TRACING_ENABLE_EX phtEx = (PPROCESS_HANDLE_TRACING_ENABLE_EX)ProcessInformation;
-				if (phtEx->Flags != 0)
-				{
-					return STATUS_INVALID_PARAMETER;
-				}
-			}
+                PPROCESS_HANDLE_TRACING_ENABLE_EX phtEx = (PPROCESS_HANDLE_TRACING_ENABLE_EX)ProcessInformation;
+                if (phtEx->Flags != 0)
+                {
+                    return STATUS_INVALID_PARAMETER;
+                }
+            }
 
-			IsProcessHandleTracingEnabled = enable;
-			return STATUS_SUCCESS;
-		}
+            IsProcessHandleTracingEnabled = enable;
+            return STATUS_SUCCESS;
+        }
     }
     return HookDllData.dNtSetInformationProcess(ProcessHandle, ProcessInformationClass, ProcessInformation, ProcessInformationLength);
 }
@@ -425,7 +436,7 @@ NTSTATUS NTAPI HookedNtGetContextThread(HANDLE ThreadHandle, PCONTEXT ThreadCont
     DWORD ContextBackup = 0;
     BOOLEAN DebugRegistersRequested = FALSE;
     if (ThreadHandle == NtCurrentThread ||
-		HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess) == GetProcessIdByThreadHandle(ThreadHandle)) //thread inside this process?
+        HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess) == GetProcessIdByThreadHandle(ThreadHandle)) //thread inside this process?
     {
         if (ThreadContext)
         {
@@ -463,7 +474,7 @@ NTSTATUS NTAPI HookedNtSetContextThread(HANDLE ThreadHandle, PCONTEXT ThreadCont
 {
     DWORD ContextBackup = 0;
     if (ThreadHandle == NtCurrentThread ||
-		HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess) == GetProcessIdByThreadHandle(ThreadHandle)) //thread inside this process?
+        HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess) == GetProcessIdByThreadHandle(ThreadHandle)) //thread inside this process?
     {
         if (ThreadContext)
         {
@@ -642,26 +653,26 @@ NTSTATUS NTAPI HookedNtClose(HANDLE Handle)
 
 NTSTATUS NTAPI HookedNtDuplicateObject(HANDLE SourceProcessHandle, HANDLE SourceHandle, HANDLE TargetProcessHandle, PHANDLE TargetHandle, ACCESS_MASK DesiredAccess, ULONG HandleAttributes, ULONG Options)
 {
-	if (Options & DUPLICATE_CLOSE_SOURCE)
-	{
-		// If a process is being debugged and duplicates a handle with DUPLICATE_CLOSE_SOURCE, *and* the handle has the ProtectFromClose bit set, a STATUS_HANDLE_NOT_CLOSABLE exception will occur.
-		// This is actually the exact same exception we already check for in NtClose, but the difference is that this NtClose call happens inside the kernel which we obviously can't hook.
-		// When a process is not being debugged, NtDuplicateObject will simply return success without closing the source. This is because ObDuplicateObject ignores NtClose return values
-		OBJECT_HANDLE_FLAG_INFORMATION HandleFlags;
-		NTSTATUS Status;
-		if (HookDllData.dNtQueryObject != nullptr)
-			Status = HookDllData.dNtQueryObject(SourceHandle, ObjectHandleFlagInformation, &HandleFlags, sizeof(HandleFlags), nullptr);
-		else
-			Status = NtQueryObject(SourceHandle, ObjectHandleFlagInformation, &HandleFlags, sizeof(HandleFlags), nullptr);
+    if (Options & DUPLICATE_CLOSE_SOURCE)
+    {
+        // If a process is being debugged and duplicates a handle with DUPLICATE_CLOSE_SOURCE, *and* the handle has the ProtectFromClose bit set, a STATUS_HANDLE_NOT_CLOSABLE exception will occur.
+        // This is actually the exact same exception we already check for in NtClose, but the difference is that this NtClose call happens inside the kernel which we obviously can't hook.
+        // When a process is not being debugged, NtDuplicateObject will simply return success without closing the source. This is because ObDuplicateObject ignores NtClose return values
+        OBJECT_HANDLE_FLAG_INFORMATION HandleFlags;
+        NTSTATUS Status;
+        if (HookDllData.dNtQueryObject != nullptr)
+            Status = HookDllData.dNtQueryObject(SourceHandle, ObjectHandleFlagInformation, &HandleFlags, sizeof(HandleFlags), nullptr);
+        else
+            Status = NtQueryObject(SourceHandle, ObjectHandleFlagInformation, &HandleFlags, sizeof(HandleFlags), nullptr);
 
-		if (NT_SUCCESS(Status) && HandleFlags.ProtectFromClose)
-		{
-			// Prevent the exception
-			Options &= ~DUPLICATE_CLOSE_SOURCE;
-		}
-	}
+        if (NT_SUCCESS(Status) && HandleFlags.ProtectFromClose)
+        {
+            // Prevent the exception
+            Options &= ~DUPLICATE_CLOSE_SOURCE;
+        }
+    }
 
-	return HookDllData.dNtDuplicateObject(SourceProcessHandle, SourceHandle, TargetProcessHandle, TargetHandle, DesiredAccess, HandleAttributes, Options);
+    return HookDllData.dNtDuplicateObject(SourceProcessHandle, SourceHandle, TargetProcessHandle, TargetHandle, DesiredAccess, HandleAttributes, Options);
 }
 
 //////////////////////////////////////////////////////////////
@@ -685,22 +696,22 @@ DWORD WINAPI HookedGetTickCount(void)
 
 ULONGLONG WINAPI HookedGetTickCount64(void) //yes we can use DWORD
 {
-	if (!OneTickCount)
-	{
-		if (HookDllData.dGetTickCount)
-		{
-			OneTickCount = HookDllData.dGetTickCount();
-		}
-		else
-		{
-			OneTickCount = RtlGetTickCount();
-		}
-	}
-	else
-	{
-		OneTickCount++;
-	}
-	return OneTickCount;
+    if (!OneTickCount)
+    {
+        if (HookDllData.dGetTickCount)
+        {
+            OneTickCount = HookDllData.dGetTickCount();
+        }
+        else
+        {
+            OneTickCount = RtlGetTickCount();
+        }
+    }
+    else
+    {
+        OneTickCount++;
+    }
+    return OneTickCount;
 }
 
 static SYSTEMTIME OneLocalTime = {0};
@@ -708,82 +719,82 @@ static SYSTEMTIME OneSystemTime = {0};
 
 void WINAPI HookedGetLocalTime(LPSYSTEMTIME lpSystemTime)
 {
-	if (!OneLocalTime.wYear)
-	{
-		RealGetLocalTime(&OneLocalTime);
+    if (!OneLocalTime.wYear)
+    {
+        RealGetLocalTime(&OneLocalTime);
 
-		if (HookDllData.dGetSystemTime)
-		{
-			RealGetSystemTime(&OneSystemTime);
-		}
-	}
-	else
-	{
-		IncreaseSystemTime(&OneLocalTime);
+        if (HookDllData.dGetSystemTime)
+        {
+            RealGetSystemTime(&OneSystemTime);
+        }
+    }
+    else
+    {
+        IncreaseSystemTime(&OneLocalTime);
 
-		if (HookDllData.dGetSystemTime)
-		{
-			IncreaseSystemTime(&OneSystemTime);
-		}
-	}
+        if (HookDllData.dGetSystemTime)
+        {
+            IncreaseSystemTime(&OneSystemTime);
+        }
+    }
 
-	if (lpSystemTime)
-	{
-		memcpy(lpSystemTime, &OneLocalTime, sizeof(SYSTEMTIME));
-	}
+    if (lpSystemTime)
+    {
+        memcpy(lpSystemTime, &OneLocalTime, sizeof(SYSTEMTIME));
+    }
 }
 
 void WINAPI HookedGetSystemTime(LPSYSTEMTIME lpSystemTime)
 {
-	if (!OneSystemTime.wYear)
-	{
-		RealGetSystemTime(&OneSystemTime);
+    if (!OneSystemTime.wYear)
+    {
+        RealGetSystemTime(&OneSystemTime);
 
-		if (HookDllData.dGetLocalTime)
-		{
-			RealGetLocalTime(&OneLocalTime);
-		}
-	}
-	else
-	{
-		IncreaseSystemTime(&OneSystemTime);
+        if (HookDllData.dGetLocalTime)
+        {
+            RealGetLocalTime(&OneLocalTime);
+        }
+    }
+    else
+    {
+        IncreaseSystemTime(&OneSystemTime);
 
-		if (HookDllData.dGetLocalTime)
-		{
-			IncreaseSystemTime(&OneLocalTime);
-		}
-	}
+        if (HookDllData.dGetLocalTime)
+        {
+            IncreaseSystemTime(&OneLocalTime);
+        }
+    }
 
-	if (lpSystemTime)
-	{
-		memcpy(lpSystemTime, &OneSystemTime, sizeof(SYSTEMTIME));
-	}
+    if (lpSystemTime)
+    {
+        memcpy(lpSystemTime, &OneSystemTime, sizeof(SYSTEMTIME));
+    }
 }
 
 static LARGE_INTEGER OneNativeSysTime = {0};
 
 NTSTATUS WINAPI HookedNtQuerySystemTime(PLARGE_INTEGER SystemTime)
 {
-	if (!OneNativeSysTime.QuadPart)
-	{
-		HookDllData.dNtQuerySystemTime(&OneNativeSysTime);
-	}
-	else
-	{
-		OneNativeSysTime.QuadPart++;
-	}
+    if (!OneNativeSysTime.QuadPart)
+    {
+        HookDllData.dNtQuerySystemTime(&OneNativeSysTime);
+    }
+    else
+    {
+        OneNativeSysTime.QuadPart++;
+    }
 
-	NTSTATUS ntStat = HookDllData.dNtQuerySystemTime(SystemTime);
+    NTSTATUS ntStat = HookDllData.dNtQuerySystemTime(SystemTime);
 
-	if (ntStat == STATUS_SUCCESS)
-	{
-		if (SystemTime)
-		{
-			SystemTime->QuadPart = OneNativeSysTime.QuadPart;
-		}
-	}
+    if (ntStat == STATUS_SUCCESS)
+    {
+        if (SystemTime)
+        {
+            SystemTime->QuadPart = OneNativeSysTime.QuadPart;
+        }
+    }
 
-	return ntStat;
+    return ntStat;
 }
 
 static LARGE_INTEGER OnePerformanceCounter = {0};
@@ -791,31 +802,31 @@ static LARGE_INTEGER OnePerformanceFrequency = {0};
 
 NTSTATUS NTAPI HookedNtQueryPerformanceCounter(PLARGE_INTEGER PerformanceCounter, PLARGE_INTEGER PerformanceFrequency)
 {
-	if (!OnePerformanceCounter.QuadPart)
-	{
-		HookDllData.dNtQueryPerformanceCounter(&OnePerformanceCounter, &OnePerformanceFrequency);
-	}
-	else
-	{
-		OnePerformanceCounter.QuadPart++;
-	}
+    if (!OnePerformanceCounter.QuadPart)
+    {
+        HookDllData.dNtQueryPerformanceCounter(&OnePerformanceCounter, &OnePerformanceFrequency);
+    }
+    else
+    {
+        OnePerformanceCounter.QuadPart++;
+    }
 
-	NTSTATUS ntStat = HookDllData.dNtQueryPerformanceCounter(PerformanceCounter, PerformanceFrequency);
+    NTSTATUS ntStat = HookDllData.dNtQueryPerformanceCounter(PerformanceCounter, PerformanceFrequency);
 
-	if (ntStat == STATUS_SUCCESS)
-	{
-		if (PerformanceFrequency) //OPTIONAL
-		{
-			PerformanceFrequency->QuadPart = OnePerformanceFrequency.QuadPart;
-		}
+    if (ntStat == STATUS_SUCCESS)
+    {
+        if (PerformanceFrequency) //OPTIONAL
+        {
+            PerformanceFrequency->QuadPart = OnePerformanceFrequency.QuadPart;
+        }
 
-		if (PerformanceCounter)
-		{
-			PerformanceCounter->QuadPart = OnePerformanceCounter.QuadPart;
-		}
-	}
+        if (PerformanceCounter)
+        {
+            PerformanceCounter->QuadPart = OnePerformanceCounter.QuadPart;
+        }
+    }
 
-	return ntStat;
+    return ntStat;
 }
 
 //////////////////////////////////////////////////////////////
@@ -861,23 +872,23 @@ HWND NTAPI HookedNtUserFindWindowEx(HWND hWndParent, HWND hWndChildAfter, PUNICO
             return 0;
         }
 
-		if (HookDllData.EnableProtectProcessId == TRUE)
-		{
-			DWORD dwProcessId;
-			if (HookDllData.dNtUserQueryWindow)
-			{
-				dwProcessId = HandleToULong(HookDllData.dNtUserQueryWindow(resultHwnd, WindowProcess));
-			}
-			else
-			{
-				dwProcessId = HandleToULong(HookDllData.NtUserQueryWindow(resultHwnd, WindowProcess));
-			}
+        if (HookDllData.EnableProtectProcessId == TRUE)
+        {
+            DWORD dwProcessId;
+            if (HookDllData.dNtUserQueryWindow)
+            {
+                dwProcessId = HandleToULong(HookDllData.dNtUserQueryWindow(resultHwnd, WindowProcess));
+            }
+            else
+            {
+                dwProcessId = HandleToULong(HookDllData.NtUserQueryWindow(resultHwnd, WindowProcess));
+            }
 
-			if (dwProcessId == HookDllData.dwProtectedProcessId)
-			{
-				return 0;
-			}
-		}
+            if (dwProcessId == HookDllData.dwProtectedProcessId)
+            {
+                return 0;
+            }
+        }
     }
     return resultHwnd;
 }
@@ -939,24 +950,24 @@ NTSTATUS NTAPI HookedNtUserBuildHwndList_Eight(HDESK hDesktop, HWND hwndParent, 
 
 HANDLE NTAPI HookedNtUserQueryWindow(HWND hwnd, WINDOWINFOCLASS WindowInfo)
 {
-	if ((WindowInfo == WindowProcess || WindowInfo == WindowThread) && IsWindowBad(hwnd))
-	{
-		if (WindowInfo == WindowProcess)
-			return NtCurrentTeb()->ClientId.UniqueProcess;
-		if (WindowInfo == WindowThread)
-			return NtCurrentTeb()->ClientId.UniqueThread;
-	}
-	return HookDllData.dNtUserQueryWindow(hwnd, WindowInfo);
+    if ((WindowInfo == WindowProcess || WindowInfo == WindowThread) && IsWindowBad(hwnd))
+    {
+        if (WindowInfo == WindowProcess)
+            return NtCurrentTeb()->ClientId.UniqueProcess;
+        if (WindowInfo == WindowThread)
+            return NtCurrentTeb()->ClientId.UniqueThread;
+    }
+    return HookDllData.dNtUserQueryWindow(hwnd, WindowInfo);
 }
 
 HWND NTAPI HookedNtUserGetForegroundWindow()
 {
-	HWND Hwnd = HookDllData.dNtUserGetForegroundWindow();
-	if (Hwnd != nullptr && IsWindowBad(Hwnd))
-	{
-		Hwnd = (HWND)HookDllData.NtUserGetThreadState(THREADSTATE_ACTIVEWINDOW);
-	}
-	return Hwnd;
+    HWND Hwnd = HookDllData.dNtUserGetForegroundWindow();
+    if (Hwnd != nullptr && IsWindowBad(Hwnd))
+    {
+        Hwnd = (HWND)HookDllData.NtUserGetThreadState(THREADSTATE_ACTIVEWINDOW);
+    }
+    return Hwnd;
 }
 
 //WIN XP: CreateThread -> CreateRemoteThread -> NtCreateThread
@@ -1131,19 +1142,19 @@ void FilterProcess(PSYSTEM_PROCESS_INFORMATION pInfo)
 
 NTSTATUS NTAPI HookedNtResumeThread(HANDLE ThreadHandle, PULONG PreviousSuspendCount)
 {
-	DWORD dwProcessId = GetProcessIdByThreadHandle(ThreadHandle);
-	if (dwProcessId != HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess)) //malware starts the thread of another process
-	{
-		DumpMalware(dwProcessId);
-		TerminateProcessByProcessId(dwProcessId); //terminate it
-		DbgPrint((PCH)"Malware called ResumeThread");
-		DbgBreakPoint();
-		return STATUS_SUCCESS;
-	}
-	else
-	{
-		return HookDllData.dNtResumeThread(ThreadHandle, PreviousSuspendCount);
-	}
+    DWORD dwProcessId = GetProcessIdByThreadHandle(ThreadHandle);
+    if (dwProcessId != HandleToULong(NtCurrentTeb()->ClientId.UniqueProcess)) //malware starts the thread of another process
+    {
+        DumpMalware(dwProcessId);
+        TerminateProcessByProcessId(dwProcessId); //terminate it
+        DbgPrint((PCH)"Malware called ResumeThread");
+        DbgBreakPoint();
+        return STATUS_SUCCESS;
+    }
+    else
+    {
+        return HookDllData.dNtResumeThread(ThreadHandle, PreviousSuspendCount);
+    }
 }
 
 HANDLE hNtdllFile = INVALID_HANDLE_VALUE;

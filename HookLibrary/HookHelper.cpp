@@ -383,10 +383,20 @@ DWORD GetProcessIdByThreadHandle(HANDLE hThread)
 {
 	THREAD_BASIC_INFORMATION tbi;
 
-	if (NT_SUCCESS(NtQueryInformationThread(hThread, ThreadBasicInformation, &tbi, sizeof(THREAD_BASIC_INFORMATION), 0)))
-	{
-		return HandleToULong(tbi.ClientId.UniqueProcess);
-	}
+    if (HookDllData.dNtQueryInformationThread)
+    {
+	    if (NT_SUCCESS(HookDllData.dNtQueryInformationThread(hThread, ThreadBasicInformation, &tbi, sizeof(THREAD_BASIC_INFORMATION), 0)))
+	    {
+		    return HandleToULong(tbi.ClientId.UniqueProcess);
+	    }
+    }
+    else
+    {
+	    if (NT_SUCCESS(NtQueryInformationThread(hThread, ThreadBasicInformation, &tbi, sizeof(THREAD_BASIC_INFORMATION), 0)))
+	    {
+		    return HandleToULong(tbi.ClientId.UniqueProcess);
+	    }
+    }
 
 	return 0;
 }
