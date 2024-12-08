@@ -21,7 +21,8 @@ static_assert(TebPadding == -3652, "You touched ntdll.h didn't you?");
 // To create a TLS variable, declare it here
 enum class TlsVariable : ULONG_PTR
 {
-	InstrumentationCallbackDisabled, // The only TLS variable we currently actually use...
+	InstrumentationCallbackDisabled,
+    ThreadHiddenFromDebugger,
 	MaxTlsVariable // Must be last
 };
 
@@ -36,9 +37,27 @@ static_assert(static_cast<ULONG_PTR>(TlsVariable::MaxTlsVariable) - 1 <= 5, "All
 
 FORCEINLINE
 volatile
-LONG*
+char*
 TlsGetInstrumentationCallbackDisabled(
 	)
 {
-	return reinterpret_cast<volatile LONG*>(reinterpret_cast<ULONG_PTR>(NtCurrentTeb()) + TebOffset<TlsVariable::InstrumentationCallbackDisabled>::Value);
+	return reinterpret_cast<volatile char*>(reinterpret_cast<ULONG_PTR>(NtCurrentTeb()) + TebOffset<TlsVariable::InstrumentationCallbackDisabled>::Value);
+}
+
+FORCEINLINE
+volatile
+char*
+TlsGetThreadHiddenFromDebugger(
+	)
+{
+	return reinterpret_cast<volatile char*>(reinterpret_cast<ULONG_PTR>(NtCurrentTeb()) + TebOffset<TlsVariable::ThreadHiddenFromDebugger>::Value);
+}
+
+FORCEINLINE
+volatile
+char*
+TlsGetThreadHiddenFromDebugger2(PVOID Teb
+	)
+{
+	return reinterpret_cast<volatile char*>(reinterpret_cast<ULONG_PTR>(Teb) + TebOffset<TlsVariable::ThreadHiddenFromDebugger>::Value);
 }

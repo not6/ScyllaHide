@@ -313,7 +313,10 @@ HWND CreateTooltips(HWND hDlg)
         },
         {
             IDC_NTQUERYINFORMATIONTHREAD,
-            L"change me"
+            L"This option ensures that the ThreadHideFromDebugger THREADINFOCLASS value\r\n"
+            L"returns what it's supposed to when the NtSetInformationThread option is enabled.\r\n"
+            L"This should be turned on if the NtSetInformationThread option is also on, otherwise\r\n"
+            L"it can be easily detected."
         },
         {
             IDC_NTQUERYOBJECT,
