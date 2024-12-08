@@ -164,16 +164,13 @@ bool ApplyNtdllHook(HOOK_DLL_DATA * hdd, HANDLE hProcess, BYTE * dllMemory, DWOR
     {
         g_log.LogDebug(L"ApplyNtdllHook -> Hooking NtSetInformationThread");
         HOOK_NATIVE(NtSetInformationThread);
+        g_log.LogDebug(L"ApplyNtdllHook -> Hooking NtQueryInformationThread");
+        HOOK_NATIVE(NtQueryInformationThread);
     }
     if (hdd->EnableNtQuerySystemInformationHook == TRUE)
     {
         g_log.LogDebug(L"ApplyNtdllHook -> Hooking NtQuerySystemInformation");
         HOOK_NATIVE(NtQuerySystemInformation);
-    }
-    if (hdd->EnableNtQueryInformationThreadHook == TRUE)
-    {
-        g_log.LogDebug(L"ApplyNtdllHook -> Hooking NtQueryInformationThread");
-        HOOK_NATIVE(NtQueryInformationThread);
     }
     if (hdd->EnableNtQueryInformationProcessHook == TRUE)
     {

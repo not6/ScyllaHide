@@ -23,7 +23,6 @@ namespace scl
             BOOL hookNtContinue;
             BOOL hookNtCreateThreadEx;
             BOOL hookNtGetContextThread;
-            BOOL hookNtQueryInformationThread;
             BOOL hookNtQueryInformationProcess;
             BOOL hookNtQueryObject;
             BOOL hookNtQueryPerformanceCounter;
@@ -117,7 +116,6 @@ namespace scl
                 profile_.hookNtContinue ||
                 profile_.hookNtCreateThreadEx ||
                 profile_.hookNtGetContextThread ||
-                profile_.hookNtQueryInformationThread ||
                 profile_.hookNtQueryInformationProcess ||
                 profile_.hookNtQueryObject ||
                 profile_.hookNtQueryPerformanceCounter ||
