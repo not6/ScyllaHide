@@ -338,7 +338,7 @@ void * GetPEBRemote(HANDLE hProcess)
 
 	if (HookDllData.dNtQueryInformationProcess)
 	{
-        if (NT_SUCCESS(HookDllData.dNtQueryInformationProcess(hProcess, ProcessBasicInformation, &pbi, sizeof(PROCESS_BASIC_INFORMATION), 0)))
+		if (NT_SUCCESS(HookDllData.dNtQueryInformationProcess(hProcess, ProcessBasicInformation, &pbi, sizeof(PROCESS_BASIC_INFORMATION), 0)))
 		{
 			return pbi.PebBaseAddress;
 		}
@@ -346,7 +346,7 @@ void * GetPEBRemote(HANDLE hProcess)
 	else
 	{
 		//maybe not hooked
-        if (NT_SUCCESS(NtQueryInformationProcess(hProcess, ProcessBasicInformation, &pbi, sizeof(PROCESS_BASIC_INFORMATION), 0)))
+		if (NT_SUCCESS(NtQueryInformationProcess(hProcess, ProcessBasicInformation, &pbi, sizeof(PROCESS_BASIC_INFORMATION), 0)))
 		{
 			return pbi.PebBaseAddress;
 		}
@@ -383,20 +383,20 @@ DWORD GetProcessIdByThreadHandle(HANDLE hThread)
 {
 	THREAD_BASIC_INFORMATION tbi;
 
-    if (HookDllData.dNtQueryInformationThread)
-    {
-	    if (NT_SUCCESS(HookDllData.dNtQueryInformationThread(hThread, ThreadBasicInformation, &tbi, sizeof(THREAD_BASIC_INFORMATION), 0)))
-	    {
-		    return HandleToULong(tbi.ClientId.UniqueProcess);
-	    }
-    }
-    else
-    {
-	    if (NT_SUCCESS(NtQueryInformationThread(hThread, ThreadBasicInformation, &tbi, sizeof(THREAD_BASIC_INFORMATION), 0)))
-	    {
-		    return HandleToULong(tbi.ClientId.UniqueProcess);
-	    }
-    }
+	if (HookDllData.dNtQueryInformationThread)
+	{
+		if (NT_SUCCESS(HookDllData.dNtQueryInformationThread(hThread, ThreadBasicInformation, &tbi, sizeof(THREAD_BASIC_INFORMATION), 0)))
+		{
+			return HandleToULong(tbi.ClientId.UniqueProcess);
+		}
+	}
+	else
+	{
+		if (NT_SUCCESS(NtQueryInformationThread(hThread, ThreadBasicInformation, &tbi, sizeof(THREAD_BASIC_INFORMATION), 0)))
+		{
+			return HandleToULong(tbi.ClientId.UniqueProcess);
+		}
+	}
 
 	return 0;
 }
